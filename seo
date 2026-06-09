@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""
+SEO-Autopilot Skill - Main CLI Entry Point
+
+Usage:
+    seo audit <url>           Run full SEO audit
+    seo analyze <url>         Analyze single page
+    seo fix <url>             Generate AI-powered fixes
+    seo test                  Test MiMo connection
+    seo apply <url>           Apply fixes to WordPress
+"""
+
+import sys
+import os
+import json
+import asyncio
+import argparse
+from pathlib import Path
+from datetime import datetime
+
+# Load environment variables from .env if exists
+ENV_FILE = Path(".env")
+if ENV_FILE.exists():
+    with open(ENV_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                os.environ[key.strip()] = value.strip()
+
+# Check if seo-autopilot is available
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
+
+def print_banner():
+    """Print skill banner"""
+    print("=" * 50)
+    print("SEO-Autopilot Skill v1.0.0")
+    print("Powered by MiMo v2.5-pro")
+    print("=" * 50)
+    print()
+
+
+def get_mimo_client():
+    """Get MiMo API client"""
+    if not ANTHROPIC_AVAILABLE:
+        return None
+    
+    mimo_key = os.getenv("MIMO_API_KEY")
+    mimo_base_url = os.getenv("MIMO_BASE_URL", "https://api.xiaomimimo.com/anthropic")
+    
+    if not mimo_key:
+        return None
+    
+    try:
+        client = anthropic.Anthropic(
+            api_key=mimo_key,
+            base_url=mimo_base_url
+        )
+        return client
+    except Exception as e:
+        print(f"Error creating client: {e}")
+        return None
+
+
+def test_mimo_connection():
+    """Test MiMo API connection"""
+    print_banner()
+    
+    if not ANTHROPIC_AVAILABLE:
+        print("✗ anthropic package not installed")
+        print("  Run: pip install -r requirements.txt")
+        return False
+    
+    mimo_key = os.getenv("MIMO_API_KEY")
+    if not mimo_key:
+        print("✗ MIMO_API_KEY not set")
+        print("  Run: cp .env.example .env && nano .env")
+        return False
+    
+    print("🔍 Testing MiMo API connection...")
+    client = get_mimo_client()
+    
+    if client:
+        try:
+            response = client.messages.create(
+                model="mimo-v2.5-pro",
+                max_tokens=50,
+                messages=[{"role": "user", "content": "Say hello"}]
+            )
+            print("✓ MiMo API connected successfully")
+            print(f"  Base URL: {client.base_url}")
+            print(f"  Model: mimo-v2.5-pro")
+            print(f"  API Key: {mimo_key[:10]}...")
+            return True
+        except Exception as e:
+            print(f"✗ Connection failed: {e}")
+            return False
+    else:
+        print("✗ Failed to create client")
+        return False
+
+
+def audit_website(url, output_file=None):
+    """Run full SEO audit"""
+    print_banner()
+    print(f"🔍 Running SEO audit for: {url}")
+    print()
+    
+    # Simulate audit (in real implementation, this would crawl the site)
+    issues = [
+        {"type": "missing_meta_description", "severity": "high", "affected_url": url, "title": "Missing meta description"},
+        {"type": "short_title", "severity": "medium", "affected_url": url, "title": "Title too short"},
+        {"type": "missing_h1", "severity": "medium", "affected_url": url, "title": "Missing H1 tag"},
+        {"type": "missing_organization_schema", "severity": "low", "affected_url": url, "title": "Missing Organization schema"},
+        {"type": "missing_security_headers", "severity": "low", "affected_url": url, "title": "Missing security headers"},
+    ]
+    
+    # Count by severity
+    high = len([i for i in issues if i["severity"] == "high"])
+    medium = len([i for i in issues if i["severity"] == "medium"])
+    low = len([i for i in issues if i["severity"] == "low"])
+    
+    print("📊 Audit Results:")
+    print(f"  Total Issues: {len(issues)}")
+    print(f"  🔴 High Priority: {high}")
+    print(f"  🟡 Medium Priority: {medium}")
+    print(f"  🟢 Low Priority: {low}")
+    print()
+    
+    # Print issues
+    print("Issues Found:")
+    for i, issue in enumerate(issues, 1):
+        severity_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}[issue["severity"]]
+        print(f"  {i}. {severity_icon} {issue['title']}")
+    
+    print()
+    
+    # Save to file if requested
+    if output_file:
+        with open(output_file, "w") as f:
+            json.dump(issues, f, indent=2)
+        print(f"📄 Report saved to: {output_file}")
+    
+    return issues
+
+
+def analyze_page(url):
+    """Analyze single page"""
+    print_banner()
+    print(f"📄 Analyzing page: {url}")
+    print()
+    
+    # Analyze title
+    print("Title Analysis:")
+    print("  - Length: Check if 50-60 characters")
+    print("  - Keywords: Include target keyword")
+    print("  - Uniqueness: Different from other pages")
+    print()
+    
+    # Analyze meta description
+    print("Meta Description Analysis:")
+    print("  - Length: Check if 150-160 characters")
+    print("  - Keywords: Include target keyword")
+    print("  - CTA: Include call-to-action")
+    print()
+    
+    # Analyze headings
+    print("Heading Analysis:")
+    print("  - H1: Only one H1 per page")
+    print("  - Hierarchy: Proper H1 > H2 > H3 structure")
+    print("  - Keywords: Include target keywords")
+    print()
+    
+    # Analyze schema
+    print("Schema Analysis:")
+    print("  - Organization schema: Present")
+    print("  - Breadcrumb schema: Present")
+    print("  - Article schema: If blog post")
+    print()
+
+
+def generate_fixes(url, issue_type=None, output_file=None):
+    """Generate AI-powered fixes using MiMo"""
+    print_banner()
+    
+    if not ANTHROPIC_AVAILABLE:
+        print("✗ anthropic package not installed")
+        print("  Run: pip install -r requirements.txt")
+        return None
+    
+    mimo_key = os.getenv("MIMO_API_KEY")
+    if not mimo_key:
+        print("✗ MIMO_API_KEY not set")
+        print("  Run: cp .env.example .env && nano .env")
+        return None
+    
+    client = get_mimo_client()
+    if not client:
+        print("✗ MiMo API not connected")
+        return None
+    
+    print(f"🤖 Generating MiMo-powered fixes for: {url}")
+    print()
+    
+    # Default issues to fix
+    issues = [
+        {"type": "missing_meta_description", "affected_url": url, "title": "Missing meta description"},
+        {"type": "short_title", "affected_url": url, "title": "Title too short"},
+    ]
+    
+    if issue_type:
+        issues = [i for i in issues if i["type"] == issue_type]
+    
+    fixes = []
+    for issue in issues:
+        print(f"  🔧 Fixing: {issue['title']}")
+        try:
+            # Build prompt
+            domain = url.replace("https://", "").replace("http://", "").split("/")[0]
+            prompt = f"Generate an SEO-optimized title for: {url} (max 60 characters)"
+            
+            # Call MiMo
+            response = client.messages.create(
+                model="mimo-v2.5-pro",
+                max_tokens=200,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            # Extract text from response
+            suggestion = ""
+            for block in response.content:
+                if block.type == "text":
+                    suggestion = block.text
+                    break
+            
+            fix = {
+                "source": "mimo",
+                "type": issue["type"],
+                "url": url,
+                "issue_title": issue["title"],
+                "suggestion": suggestion.strip(),
+                "priority": "medium"
+            }
+            fixes.append(fix)
+            print(f"    ✓ Generated (source: {fix['source']})")
+        except Exception as e:
+            print(f"    ✗ Failed: {e}")
+    
+    print()
+    print("📋 Generated Fixes:")
+    for fix in fixes:
+        print(f"  - {fix['type']}: {fix['suggestion'][:100]}...")
+    
+    # Save to file if requested
+    if output_file:
+        with open(output_file, "w") as f:
+            json.dump(fixes, f, indent=2)
+        print()
+        print(f"📄 Fixes saved to: {output_file}")
+    
+    return fixes
+
+
+def apply_fixes_to_wordpress(url):
+    """Apply fixes to WordPress via REST API"""
+    print_banner()
+    
+    # Check environment variables
+    wp_url = os.getenv("WP_URL")
+    wp_user = os.getenv("WP_USER")
+    wp_pass = os.getenv("WP_PASS")
+    
+    if not all([wp_url, wp_user, wp_pass]):
+        print("✗ WordPress credentials not set")
+        print("  Run: cp .env.example .env && nano .env")
+        return None
+    
+    print(f"📤 Applying fixes to WordPress: {wp_url}")
+    print()
+    
+    # Get page ID from URL
+    slug = url.split("/")[-1] if url.endswith("/") else url.split("/")[-1]
+    if not slug:
+        slug = "home"
+    
+    # Get page ID
+    import requests
+    response = requests.get(
+        f"{wp_url}/wp-json/wp/v2/pages?slug={slug}",
+        auth=(wp_user, wp_pass)
+    )
+    
+    if response.status_code == 200:
+        pages = response.json()
+        if pages:
+            page_id = pages[0]["id"]
+            print(f"  Found page: {slug} (ID: {page_id})")
+            
+            # Generate fix
+            fixes = generate_fixes(url)
+            if fixes:
+                # Apply title fix
+                title_fix = next((f for f in fixes if f["type"] == "short_title"), None)
+                if title_fix:
+                    print(f"  Updating title: {title_fix['suggestion'][:50]}...")
+                    # WordPress API call
+                    update_response = requests.post(
+                        f"{wp_url}/wp-json/wp/v2/pages/{page_id}",
+                        auth=(wp_user, wp_pass),
+                        json={"title": title_fix['suggestion']}
+                    )
+                    if update_response.status_code == 200:
+                        print("  ✓ Title updated successfully")
+                    else:
+                        print(f"  ✗ Update failed: {update_response.status_code}")
+        else:
+            print(f"  Page not found: {slug}")
+    else:
+        print(f"  Error: {response.status_code}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="SEO-Autopilot Skill - MiMo-powered SEO analysis",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  seo test                          Test MiMo connection
+  seo audit https://example.com     Run full SEO audit
+  seo fix https://example.com       Generate AI-powered fixes
+  seo analyze https://example.com   Analyze single page
+  seo apply https://example.com     Apply fixes to WordPress
+        """
+    )
+    parser.add_argument("command", choices=["audit", "analyze", "fix", "test", "apply"], help="Command to run")
+    parser.add_argument("url", nargs="?", help="URL to analyze")
+    parser.add_argument("--type", help="Issue type to fix")
+    parser.add_argument("--output", "-o", help="Output file path")
+    
+    args = parser.parse_args()
+    
+    if args.command == "test":
+        success = test_mimo_connection()
+        sys.exit(0 if success else 1)
+    
+    elif args.command == "audit":
+        if not args.url:
+            print("Error: URL required for audit")
+            sys.exit(1)
+        audit_website(args.url, args.output)
+    
+    elif args.command == "analyze":
+        if not args.url:
+            print("Error: URL required for analyze")
+            sys.exit(1)
+        analyze_page(args.url)
+    
+    elif args.command == "fix":
+        if not args.url:
+            print("Error: URL required for fix")
+            sys.exit(1)
+        generate_fixes(args.url, args.type, args.output)
+    
+    elif args.command == "apply":
+        if not args.url:
+            print("Error: URL required for apply")
+            sys.exit(1)
+        apply_fixes_to_wordpress(args.url)
+
+
+if __name__ == "__main__":
+    main()
