@@ -28,12 +28,18 @@ if ENV_FILE.exists():
                 key, value = line.split("=", 1)
                 os.environ[key.strip()] = value.strip()
 
-# Check if seo-autopilot is available
+# Check if dependencies are available
 try:
     import anthropic
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
+
+try:
+    from report_generator import HTMLReportGenerator
+    REPORT_GENERATOR_AVAILABLE = True
+except ImportError:
+    REPORT_GENERATOR_AVAILABLE = False
 
 
 def print_banner():
@@ -105,7 +111,59 @@ def test_mimo_connection():
         return False
 
 
-def audit_website(url, output_file=None):
+def generate_mimo_fix(url, issue_type):
+    """Generate fix using MiMo AI"""
+    client = get_mimo_client()
+    if not client:
+        return None
+    
+    # Build prompt based on issue type
+    if issue_type == "missing_meta_description":
+        prompt = f"""Generate an SEO-optimized meta description for: {url}
+        
+Requirements:
+- 150-160 characters max
+- Include relevant keywords
+- Compelling for clicks
+- Include call-to-action
+
+Return only the meta description text, no quotes or explanation."""
+    
+    elif issue_type == "short_title":
+        prompt = f"""Generate an SEO-optimized title tag for: {url}
+        
+Requirements:
+- 50-60 characters max
+- Include primary keyword
+- Compelling for clicks
+- Brand name included
+
+Return only the title text, no quotes or explanation."""
+    
+    else:
+        prompt = f"""Analyze this URL and suggest SEO improvements: {url}
+        
+Return a brief recommendation (1-2 sentences)."""
+    
+    try:
+        response = client.messages.create(
+            model="mimo-v2.5-pro",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        # Extract text from response
+        for block in response.content:
+            if block.type == "text":
+                return block.text.strip()
+        
+        return None
+    except Exception as e:
+        print(f"  ✗ MiMo error: {e}")
+        return None
+
+
+def audit_website(url, output_file=None, generate_html=False):
     """Run full SEO audit"""
     print_banner()
     print(f"🔍 Running SEO audit for: {url}")
@@ -114,11 +172,26 @@ def audit_website(url, output_file=None):
     # Simulate audit (in real implementation, this would crawl the site)
     issues = [
         {"type": "missing_meta_description", "severity": "high", "affected_url": url, "title": "Missing meta description"},
-        {"type": "short_title", "severity": "medium", "affected_url": url, "title": "Title too short"},
-        {"type": "missing_h1", "severity": "medium", "affected_url": url, "title": "Missing H1 tag"},
+        {"type": "short_title", "severity": "medium", "affected_url": f"{url}/about", "title": "Title too short"},
+        {"type": "missing_h1", "severity": "medium", "affected_url": f"{url}/blog", "title": "Missing H1 tag"},
         {"type": "missing_organization_schema", "severity": "low", "affected_url": url, "title": "Missing Organization schema"},
         {"type": "missing_security_headers", "severity": "low", "affected_url": url, "title": "Missing security headers"},
     ]
+    
+    # Generate AI fixes
+    print("🤖 Generating AI-powered fixes...")
+    for issue in issues:
+        if issue["type"] in ["missing_meta_description", "short_title"]:
+            fix = generate_mimo_fix(issue["affected_url"], issue["type"])
+            if fix:
+                issue["fix"] = fix
+                print(f"  ✓ {issue['title']}")
+            else:
+                print(f"  ✗ {issue['title']} (using default)")
+        else:
+            issue["fix"] = f"Recommended: Add {issue['type'].replace('_', ' ')} to {issue['affected_url']}"
+    
+    print()
     
     # Count by severity
     high = len([i for i in issues if i["severity"] == "high"])
@@ -140,12 +213,41 @@ def audit_website(url, output_file=None):
     
     print()
     
-    # Save to file if requested
-    if output_file:
-        with open(output_file, "w") as f:
-            json.dump(issues, f, indent=2)
-        print(f"📄 Report saved to: {output_file}")
+    # Prepare data for export
+    audit_data = {
+        "url": url,
+        "timestamp": datetime.now().isoformat(),
+        "issues": issues,
+        "pages": [
+            {"url": url, "issues": len(issues), "score": max(0, 100 - (high * 20 + medium * 10 + low * 5))}
+        ],
+        "summary": {
+            "total": len(issues),
+            "high": high,
+            "medium": medium,
+            "low": low
+        }
+    }
     
+    # Save JSON if requested
+    if output_file and not output_file.endswith('.html'):
+        with open(output_file, "w") as f:
+            json.dump(audit_data, f, indent=2)
+        print(f"📄 JSON report saved to: {output_file}")
+    
+    # Generate HTML if requested
+    if generate_html:
+        if REPORT_GENERATOR_AVAILABLE:
+            generator = HTMLReportGenerator()
+            html_file = output_file if output_file and output_file.endswith('.html') else f"seo-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.html"
+            generator.generate(audit_data, html_file)
+            print(f"📄 HTML report saved to: {html_file}")
+            print(f"   Open in browser: file://{os.path.abspath(html_file)}")
+        else:
+            print("✗ HTML report generator not available")
+            print("  Make sure report_generator.py is in the same directory")
+    
+    print()
     return issues
 
 
@@ -184,7 +286,7 @@ def analyze_page(url):
     print()
 
 
-def generate_fixes(url, issue_type=None, output_file=None):
+def generate_fixes(url, issue_type=None, output_file=None, generate_html=False):
     """Generate AI-powered fixes using MiMo"""
     print_banner()
     
@@ -197,11 +299,6 @@ def generate_fixes(url, issue_type=None, output_file=None):
     if not mimo_key:
         print("✗ MIMO_API_KEY not set")
         print("  Run: cp .env.example .env && nano .env")
-        return None
-    
-    client = get_mimo_client()
-    if not client:
-        print("✗ MiMo API not connected")
         return None
     
     print(f"🤖 Generating MiMo-powered fixes for: {url}")
@@ -219,37 +316,21 @@ def generate_fixes(url, issue_type=None, output_file=None):
     fixes = []
     for issue in issues:
         print(f"  🔧 Fixing: {issue['title']}")
-        try:
-            # Build prompt
-            domain = url.replace("https://", "").replace("http://", "").split("/")[0]
-            prompt = f"Generate an SEO-optimized title for: {url} (max 60 characters)"
-            
-            # Call MiMo
-            response = client.messages.create(
-                model="mimo-v2.5-pro",
-                max_tokens=200,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            # Extract text from response
-            suggestion = ""
-            for block in response.content:
-                if block.type == "text":
-                    suggestion = block.text
-                    break
-            
-            fix = {
+        fix = generate_mimo_fix(url, issue["type"])
+        if fix:
+            fix_data = {
                 "source": "mimo",
                 "type": issue["type"],
                 "url": url,
                 "issue_title": issue["title"],
-                "suggestion": suggestion.strip(),
+                "suggestion": fix,
+                "fix": fix,
                 "priority": "medium"
             }
-            fixes.append(fix)
-            print(f"    ✓ Generated (source: {fix['source']})")
-        except Exception as e:
-            print(f"    ✗ Failed: {e}")
+            fixes.append(fix_data)
+            print(f"    ✓ Generated (source: mimo)")
+        else:
+            print(f"    ✗ Failed to generate fix")
     
     print()
     print("📋 Generated Fixes:")
@@ -330,17 +411,19 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  seo test                          Test MiMo connection
-  seo audit https://example.com     Run full SEO audit
-  seo fix https://example.com       Generate AI-powered fixes
-  seo analyze https://example.com   Analyze single page
-  seo apply https://example.com     Apply fixes to WordPress
+  seo test                              Test MiMo connection
+  seo audit https://example.com         Run full SEO audit
+  seo audit https://example.com --html  Generate HTML report
+  seo fix https://example.com           Generate AI-powered fixes
+  seo analyze https://example.com       Analyze single page
+  seo apply https://example.com         Apply fixes to WordPress
         """
     )
     parser.add_argument("command", choices=["audit", "analyze", "fix", "test", "apply"], help="Command to run")
     parser.add_argument("url", nargs="?", help="URL to analyze")
     parser.add_argument("--type", help="Issue type to fix")
     parser.add_argument("--output", "-o", help="Output file path")
+    parser.add_argument("--html", action="store_true", help="Generate HTML report")
     
     args = parser.parse_args()
     
@@ -352,7 +435,7 @@ Examples:
         if not args.url:
             print("Error: URL required for audit")
             sys.exit(1)
-        audit_website(args.url, args.output)
+        audit_website(args.url, args.output, args.html)
     
     elif args.command == "analyze":
         if not args.url:
