@@ -45,7 +45,7 @@ except ImportError:
 def print_banner():
     """Print skill banner"""
     print("=" * 50)
-    print("SEO-Autopilot Skill v1.0.0")
+    print("SEO suggestion prototype - simulated audit findings")
     print("Powered by MiMo v2.5-pro")
     print("=" * 50)
     print()
@@ -166,7 +166,7 @@ Return a brief recommendation (1-2 sentences)."""
 def audit_website(url, output_file=None, generate_html=False):
     """Run full SEO audit"""
     print_banner()
-    print(f"🔍 Running SEO audit for: {url}")
+    print(f"Simulated SEO report for: {url} (no site crawl performed)")
     print()
     
     # Simulate audit (in real implementation, this would crawl the site)
@@ -198,7 +198,7 @@ def audit_website(url, output_file=None, generate_html=False):
     medium = len([i for i in issues if i["severity"] == "medium"])
     low = len([i for i in issues if i["severity"] == "low"])
     
-    print("📊 Audit Results:")
+    print("Simulated findings (not measured website results):")
     print(f"  Total Issues: {len(issues)}")
     print(f"  🔴 High Priority: {high}")
     print(f"  🟡 Medium Priority: {medium}")
@@ -217,6 +217,8 @@ def audit_website(url, output_file=None, generate_html=False):
     audit_data = {
         "url": url,
         "timestamp": datetime.now().isoformat(),
+        "evidence_type": "simulated",
+        "limitation": "Fixed demonstration issues; no website crawl or verified SEO findings.",
         "issues": issues,
         "pages": [
             {"url": url, "issues": len(issues), "score": max(0, 100 - (high * 20 + medium * 10 + low * 5))}
